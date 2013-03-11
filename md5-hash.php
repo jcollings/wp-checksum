@@ -66,9 +66,11 @@ class Md5_Hasher{
         // save updated md5 hashes
         $this->save_hash_file();
         
-        // log changes           
-        $this->save_log_file();
-        $this->emailChanges();
+        // log changes
+        if(!empty($this->md5_changed_output)){
+            $this->save_log_file();
+            $this->emailChanges();
+        }
     }
 
     /**
@@ -80,28 +82,33 @@ class Md5_Hasher{
         $rii = new RecursiveIteratorIterator($rdi);
         foreach($rii as $name => $obj){
             $dir_file = $obj->getRealPath(); 
-            $this->md5_gen_output[$dir_file] = array(
-                'md5' => md5_file($dir_file),
-                'filename' => $obj->getFilename(),
-                'real_path' => $dir_file
-            );
 
-            if(!isset($this->md5_gen_old[$dir_file]->md5)){
-                // new file
-                $this->md5_changed_output[$dir_file] = array(
+            if( strcmp(str_replace("\\", "/", $dir_file),str_replace("\\", "/", MD5_HASHER_DIR.$this->file_check)) <> 0 
+                && strcmp(str_replace("\\", "/", $dir_file), str_replace("\\", "/", MD5_HASHER_DIR.$this->file_change)) <> 0){
+                
+                $this->md5_gen_output[$dir_file] = array(
                     'md5' => md5_file($dir_file),
                     'filename' => $obj->getFilename(),
-                    'real_path' => $dir_file,
-                    'modified' => 'new'
+                    'real_path' => $dir_file
                 );
-            }else if($this->md5_gen_old[$dir_file]->md5 !== $this->md5_gen_output[$dir_file]['md5']){
-                // modified file
-                $this->md5_changed_output[$dir_file] = array(
-                    'md5' => md5_file($dir_file),
-                    'filename' => $obj->getFilename(),
-                    'real_path' => $dir_file,
-                    'modified' => 'edited'
-                ); 
+
+                if(!isset($this->md5_gen_old[$dir_file]->md5)){
+                    // new file
+                    $this->md5_changed_output[$dir_file] = array(
+                        'md5' => md5_file($dir_file),
+                        'filename' => $obj->getFilename(),
+                        'real_path' => $dir_file,
+                        'modified' => 'new'
+                    );
+                }else if($this->md5_gen_old[$dir_file]->md5 !== $this->md5_gen_output[$dir_file]['md5']){
+                    // modified file
+                    $this->md5_changed_output[$dir_file] = array(
+                        'md5' => md5_file($dir_file),
+                        'filename' => $obj->getFilename(),
+                        'real_path' => $dir_file,
+                        'modified' => 'edited'
+                    ); 
+                }
             }
         }
     }
@@ -154,11 +161,6 @@ class Md5_Hasher{
      * @return void
      */
     private function emailChanges(){
-        // add_action('shutdown', array($this,'send_email'));
-        $this->send_email();
-    }
-
-    public function send_email(){
         $emails = $this->getAdminEmails();
         if(!$emails){
             $emails = get_bloginfo('admin_email');
