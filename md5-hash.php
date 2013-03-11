@@ -92,7 +92,16 @@ class Md5_Hasher{
         }
         fclose($fh); 
 	    
+        $this->emailChanges($md5_changed_output);
 	}
+
+    private function emailChanges(){
+        $message = 'File Changes:'."\n";
+        foreach($md5_changed_output as $k => $v){
+            $message .=  $v['filename'].' => '.$v['modified']. "\n";
+        }
+        wp_mail( get_bloginfo('admin_email'), 'Website Changes', $message);
+    }
 }
 
 $MD5_Hasher = new MD5_Hasher();
