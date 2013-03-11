@@ -23,12 +23,17 @@ class Md5_Hasher{
      * @return void
      */
     public function __construct(){
-        add_action('Md5_Checksum', array($this, 'run_hash_check'));
-        add_action('wp', array($this, 'schedule_cron'));
+        add_action('md5_hasher_check_dir', array($this, 'run_hash_check'));
+        // add_action('wp', array($this, 'schedule_cron'));
         add_filter( 'cron_schedules', array($this, 'cron_add_schedules'));
 
-        register_activation_hook(__FILE__, array($this, 'run_hash_check'));
+        register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'unshedule_cron'));
+    }
+
+    public function activate(){
+        $this->schedule_cron();
+        $this->run_hash_check();
     }
 
     /**
@@ -36,8 +41,8 @@ class Md5_Hasher{
      * @return void
      */
     public function schedule_cron() {
-        if ( !wp_next_scheduled( 'Md5_Checksum' ) ) {
-            wp_schedule_event( time(), 'md5_hash_weekly', 'Md5_Checksum');
+        if ( !wp_next_scheduled( 'md5_hasher_check_dir' ) ) {
+            wp_schedule_event( time(), 'md5_hash_weekly', 'md5_hasher_check_dir');
         }
     }
 
@@ -46,7 +51,7 @@ class Md5_Hasher{
      * @return void
      */
     public function unshedule_cron(){
-        wp_unschedule_event( time(), 'Md5_Checksum');
+        wp_clear_scheduled_hook('md5_hasher_check_dir');
     }
 
     /**
@@ -85,7 +90,7 @@ class Md5_Hasher{
 
             if( strcmp(str_replace("\\", "/", $dir_file),str_replace("\\", "/", MD5_HASHER_DIR.$this->file_check)) <> 0 
                 && strcmp(str_replace("\\", "/", $dir_file), str_replace("\\", "/", MD5_HASHER_DIR.$this->file_change)) <> 0){
-                
+
                 $this->md5_gen_output[$dir_file] = array(
                     'md5' => md5_file($dir_file),
                     'filename' => $obj->getFilename(),
