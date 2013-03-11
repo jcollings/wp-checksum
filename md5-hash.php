@@ -63,12 +63,10 @@ class Md5_Hasher{
         // save updated md5 hashes
         $this->save_hash_file();
         
-        // log changes
-        if(!empty($this->md5_checksums)){
-           
-            $this->save_log_file();
-            $this->emailChanges();
-        }
+        // log changes           
+        $this->save_log_file();
+        // $this->emailChanges();
+
     }
 
     /**
