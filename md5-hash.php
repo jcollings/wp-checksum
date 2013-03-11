@@ -100,7 +100,41 @@ class Md5_Hasher{
         foreach($md5_changed_output as $k => $v){
             $message .=  $v['filename'].' => '.$v['modified']. "\n";
         }
-        wp_mail( get_bloginfo('admin_email'), 'Website Changes', $message);
+        
+        $emails = $this->getAdminEmails();
+        if($emails){
+            wp_mail( $emails, 'Website Changes', $message);
+        }else{
+            wp_mail( get_bloginfo('admin_email'), 'Website Changes', $message);
+        }
+    }
+
+    /**
+     * Get list of administrator email addresses
+     * @param  array $ids specific admin ids
+     * @return array      admin email addresses
+     */
+    private function getAdminEmails($ids = null){
+        $emails = array();
+        $args = array('role' => 'Administrator');
+
+        if(is_array($ids) && !empty($ids)){
+            $args['include'] = $ids;
+        }
+
+        $wp_user_query = new WP_User_Query($args);
+        $admins = $wp_user_query->get_results();
+
+        if(!empty($admins)){
+            foreach($admins as $admin){
+                $emails[] = $admin->user_email;
+            }
+        }
+
+        if(empty($emails))
+            return false;
+
+        return $emails;
     }
 }
 
