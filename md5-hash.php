@@ -25,6 +25,7 @@ class Md5_Hasher{
     public function __construct(){
         add_action('Md5_Checksum', array($this, 'run_hash_check'));
         add_action('wp', array($this, 'schedule_cron'));
+        add_filter( 'cron_schedules', array($this, 'cron_add_schedules'));
 
         register_activation_hook(__FILE__, array($this, 'run_hash_check'));
         register_deactivation_hook(__FILE__, array($this, 'unshedule_cron'));
@@ -36,7 +37,7 @@ class Md5_Hasher{
      */
     public function schedule_cron() {
         if ( !wp_next_scheduled( 'Md5_Checksum' ) ) {
-            wp_schedule_event( time(), 'hourly', 'Md5_Checksum');
+            wp_schedule_event( time(), 'md5_hash_weekly', 'Md5_Checksum');
         }
     }
 
@@ -44,7 +45,7 @@ class Md5_Hasher{
      * Remove wp-cron schedule
      * @return void
      */
-    private function unshedule_cron(){
+    public function unshedule_cron(){
         wp_unschedule_event( time(), 'Md5_Checksum');
     }
 
@@ -53,8 +54,10 @@ class Md5_Hasher{
      * @return void
      */
     public function run_hash_check() {
-
-        // load list of file hashes
+        add_action('plugins_loaded', array($this, 'hash_check' ));
+    }
+    public function hash_check(){
+         // load list of file hashes
         $this->read_hash_file();
 
         // read all files hashes
@@ -65,8 +68,7 @@ class Md5_Hasher{
         
         // log changes           
         $this->save_log_file();
-        // $this->emailChanges();
-
+        $this->emailChanges();
     }
 
     /**
@@ -152,17 +154,22 @@ class Md5_Hasher{
      * @return void
      */
     private function emailChanges(){
+        // add_action('shutdown', array($this,'send_email'));
+        $this->send_email();
+    }
+
+    public function send_email(){
+        $emails = $this->getAdminEmails();
+        if(!$emails){
+            $emails = get_bloginfo('admin_email');
+        }
+
         $message = 'File Changes:'."\n";
         foreach($this->md5_changed_output as $k => $v){
             $message .=  $v['filename'].' => '.$v['modified']. "\n";
         }
-        
-        $emails = $this->getAdminEmails();
-        if($emails){
-            wp_mail( $emails, 'Website Changes', $message);
-        }else{
-            wp_mail( get_bloginfo('admin_email'), 'Website Changes', $message);
-        }
+
+        wp_mail( $emails, 'Website Changes', $message);
     }
 
     /**
@@ -191,6 +198,18 @@ class Md5_Hasher{
             return false;
 
         return $emails;
+    }
+
+    /**
+     * Add weekly cron schedule
+     * @return array
+     */
+    public function cron_add_schedules( $schedules ) {
+        $schedules['md5_hash_weekly'] = array(
+            'interval' => 604800,
+            'display' => __( 'Once Weekly' )
+        );
+        return $schedules;
     }
 }
 
