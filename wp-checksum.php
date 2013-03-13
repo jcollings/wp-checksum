@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: MD5 Hasher
+Plugin Name: WP Checksum Generator
 Plugin URI: http://www.jclabs.co.uk
 Description: Security Process to show latest modified/created files, run as frequently as deemed fit, an email is sent automatically with the results.  
 Author: James Collings
@@ -17,6 +17,7 @@ class Md5_Hasher{
     private $md5_gen_old = array();
     private $md5_gen_output = array();
     private $md5_changed_output = array();
+    private $settings_optgroup = 'wp-checksum-generator';
     
     /**
      * Setup hooks and load settings
@@ -24,11 +25,13 @@ class Md5_Hasher{
      */
     public function __construct(){
         add_action('md5_hasher_check_dir', array($this, 'run_hash_check'));
-        // add_action('wp', array($this, 'schedule_cron'));
         add_filter( 'cron_schedules', array($this, 'cron_add_schedules'));
 
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'unshedule_cron'));
+
+        // admin hooks
+        add_action( 'admin_menu', array($this, 'settings_menu' ));
     }
 
     public function activate(){
@@ -158,7 +161,9 @@ class Md5_Hasher{
             $fh = fopen(MD5_HASHER_DIR . $this->file_check, 'x');
         }else{
             $fh = fopen(MD5_HASHER_DIR . $this->file_check, 'r');
-            $this->md5_gen_old = (Array)json_decode(fread($fh, filesize(MD5_HASHER_DIR.$this->file_check)));
+            
+            if(filesize(MD5_HASHER_DIR.$this->file_check) > 0)
+                $this->md5_gen_old = (Array)json_decode(fread($fh, filesize(MD5_HASHER_DIR.$this->file_check)));
         }
         fclose($fh);
     }
@@ -168,7 +173,12 @@ class Md5_Hasher{
      * @return void
      */
     private function emailChanges(){
-        $emails = $this->getAdminEmails();
+        $emails = $this->getAdminEmails(get_option('notification_users'));
+        $custom_email = get_option('notification_email');
+
+        if(!empty($custom_email))
+            $emails[] = $custom_email;
+
         if(!$emails){
             $emails = get_bloginfo('admin_email');
         }
@@ -178,7 +188,7 @@ class Md5_Hasher{
             $message .=  $v['real_path'].' => '.$v['modified']. "\n";
         }
 
-        wp_mail( $emails, 'Website Changes', $message);
+        wp_mail( $emails, 'Website Changes', $message, '', array(MD5_HASHER_DIR . $this->file_check, MD5_HASHER_DIR.$this->file_change));
     }
 
     /**
@@ -220,6 +230,144 @@ class Md5_Hasher{
         );
         return $schedules;
     }
+
+    /**
+     * Create plugin options page under tools
+     * @return void
+     */
+    public function settings_menu(){
+        // add_submenu_page($parent_slug, $page_title, $menu_title, $capability, $menu_slug, $function = '')
+        add_submenu_page('tools.php','Checksum Generator', 'MD5 Checksums', 'manage_options', 'checksum-generator', array($this, 'theme_options_page'));
+
+        //call register settings function
+        add_action( 'admin_init', array($this, 'register_settings' ));
+    }
+
+    /**
+     * Output settings page
+     * @return void
+     */
+    public function theme_options_page(){
+        ?>
+        <div class="wrap">
+            <div id="icon-options-general" class="icon32"><br></div><h2>Checksum Generator<a href="post-new.php" class="add-new-h2">Run Now</a></h2>
+            <p>Keep track file changes, so you know when something is going wrong.</p>
+
+            <form action="options.php" method="post">  
+                <?php  
+                settings_fields($this->settings_optgroup);   
+                do_settings_sections(__FILE__);  
+                ?>  
+                <p class="submit">  
+                    <input name="Submit" type="submit" class="button-primary" value="<?php esc_attr_e('Save Changes'); ?>" />  
+                </p>  
+            </form> 
+
+        </div>
+        <?php
+    }
+
+    /**
+     * Register Plugin Settings
+     * @return void
+     */
+    function register_settings()
+    {
+        // register_setting($option_group, $option_name, $sanitize_callback = '')
+        register_setting($this->settings_optgroup, 'notification_email');
+        register_setting($this->settings_optgroup, 'notification_users');
+        register_setting($this->settings_optgroup, 'notification_time');
+
+        // add_settings_section($id, $title, $callback, $page)
+        add_settings_section('notifications', 'Notification Settings', array($this, 'section_notification'), __FILE__);
+        
+        // add_settings_field($id, $title, $callback, $page, $section = 'default', $args = array)
+        add_settings_field('email_add', 'Email Address', array($this, 'field_callback'), __FILE__, 'notifications', array(
+            'type' => 'text',
+            'field_id' => 'email_add',
+            'section_id' => 'notifications',
+            'setting_id' => 'notification_email'
+        ));
+
+        $wp_user_query = new WP_User_Query(array('role' => 'Administrator'));
+        $users = array();
+        $admins = $wp_user_query->get_results();
+        if(!empty($admins)){
+            foreach($admins as $admin){
+                $users[$admin->ID] = $admin->user_nicename;
+            }
+        }
+
+        add_settings_field('email_users', 'Admin Accounts', array($this, 'field_callback'), __FILE__, 'notifications', array(
+            'type' => 'select',
+            'choices' => $users,
+            'multiple' => true,
+            'field_id' => 'email_users',
+            'section_id' => 'notifications',
+            'setting_id' => 'notification_users'
+        ));
+        add_settings_field('frequency', 'Schedule Frequency', array($this, 'field_callback'), __FILE__, 'notifications', array(
+            'type' => 'select',
+            'choices' => array('hourly','daily', 'weekly'),
+            'field_id' => 'frequency',
+            'section_id' => 'notifications',
+            'setting_id' => 'notification_time'
+        ));
+    }
+
+    /**
+     * settings notification section callback
+     * @return void
+     */
+    public function section_notification()
+    {
+        ?>
+        <p>Set the emails you wish to recieve notifications</p>
+        <?php
+    }
+
+    /**
+     * Generate the output for all settings fields
+     * @param  array $args options for each field
+     * @return void
+     */
+    public function field_callback($args)
+    {
+        $multiple = false;
+        extract($args);
+        $options = get_option($setting_id);
+        switch($args['type'])
+        {
+            case 'text':
+            {
+                ?>
+                <input class='text' type='text' id='<?php echo $setting_id; ?>' name='<?php echo $setting_id; ?>[<?php echo $field_id; ?>]' value='<?php echo $options[$field_id]; ?>' />
+                <?php
+                break;
+            }
+            case 'select':
+            {
+                    ?>
+                    <select id="<?php echo $setting_id; ?>" name="<?php echo $setting_id; ?>[<?php echo $field_id; ?>][]" <?php if($multiple === true): ?>multiple<?php endif; ?>>
+                    <?php
+                    foreach($choices as $id => $name):?>
+                        <?php if(in_array($id,$options[$field_id])): ?>
+                        <option value="<?php echo $id; ?>" selected="selected"><?php echo $name; ?></option>
+                        <?php else: ?>
+                        <option value="<?php echo $id; ?>"><?php echo $name; ?></option>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                    </select>
+                    <?php
+                break;
+            }
+        }
+    }
 }
 
 $MD5_Hasher = new MD5_Hasher();
+
+if(isset($_GET['page']) && isset($_GET['check']) && $_GET['page'] == 'checksum-generator' && $_GET['check'] == 1){
+    echo 'checking';
+    $MD5_Hasher->hash_check();
+}
