@@ -33,7 +33,7 @@ class Md5_Hasher{
 
     public function activate(){
         $this->schedule_cron();
-        $this->run_hash_check();
+        $this->hash_check();
     }
 
     /**
