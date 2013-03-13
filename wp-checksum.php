@@ -32,6 +32,10 @@ class Md5_Hasher{
 
         // admin hooks
         add_action( 'admin_menu', array($this, 'settings_menu' ));
+
+        if(isset($_GET['page']) && isset($_GET['check']) && $_GET['page'] == 'checksum-generator' && $_GET['check'] == 1){
+            $this->run_hash_check();
+        }
     }
 
     public function activate(){
@@ -43,9 +47,9 @@ class Md5_Hasher{
      * Setup wp-cron to check weekly
      * @return void
      */
-    public function schedule_cron() {
+    public function schedule_cron($rate = 'md5_hash_weekly') {
         if ( !wp_next_scheduled( 'md5_hasher_check_dir' ) ) {
-            wp_schedule_event( time(), 'md5_hash_weekly', 'md5_hasher_check_dir');
+            wp_schedule_event( time(), $rate, 'md5_hasher_check_dir');
         }
     }
 
@@ -161,7 +165,7 @@ class Md5_Hasher{
             $fh = fopen(MD5_HASHER_DIR . $this->file_check, 'x');
         }else{
             $fh = fopen(MD5_HASHER_DIR . $this->file_check, 'r');
-            
+
             if(filesize(MD5_HASHER_DIR.$this->file_check) > 0)
                 $this->md5_gen_old = (Array)json_decode(fread($fh, filesize(MD5_HASHER_DIR.$this->file_check)));
         }
@@ -176,8 +180,8 @@ class Md5_Hasher{
         $emails = $this->getAdminEmails(get_option('notification_users'));
         $custom_email = get_option('notification_email');
 
-        if(!empty($custom_email))
-            $emails[] = $custom_email;
+        if(isset($custom_email['email_add']) && !empty($custom_email['email_add']))
+            $emails[] = $custom_email['email_add'];
 
         if(!$emails){
             $emails = get_bloginfo('admin_email');
@@ -250,8 +254,10 @@ class Md5_Hasher{
     public function theme_options_page(){
         ?>
         <div class="wrap">
-            <div id="icon-options-general" class="icon32"><br></div><h2>Checksum Generator<a href="post-new.php" class="add-new-h2">Run Now</a></h2>
+            <div id="icon-options-general" class="icon32"><br></div><h2>Checksum Generator<a href="?page=checksum-generator&check=1" class="add-new-h2">Run Now</a></h2>
             <p>Keep track file changes, so you know when something is going wrong.</p>
+
+            <p><strong>Next Scheduled Check:</strong> <?php echo date('H:i:s \o\n \t\h\e d/m/Y', wp_next_scheduled( 'md5_hasher_check_dir')); ?></p>
 
             <form action="options.php" method="post">  
                 <?php  
@@ -276,7 +282,7 @@ class Md5_Hasher{
         // register_setting($option_group, $option_name, $sanitize_callback = '')
         register_setting($this->settings_optgroup, 'notification_email');
         register_setting($this->settings_optgroup, 'notification_users');
-        register_setting($this->settings_optgroup, 'notification_time');
+        register_setting($this->settings_optgroup, 'notification_time', array($this, 'save_settings'));
 
         // add_settings_section($id, $title, $callback, $page)
         add_settings_section('notifications', 'Notification Settings', array($this, 'section_notification'), __FILE__);
@@ -308,11 +314,40 @@ class Md5_Hasher{
         ));
         add_settings_field('frequency', 'Schedule Frequency', array($this, 'field_callback'), __FILE__, 'notifications', array(
             'type' => 'select',
-            'choices' => array('hourly','daily', 'weekly'),
+            'choices' => array('hourly' => 'Hourly','daily' => 'Daily','weekly' => 'Weekly'),
             'field_id' => 'frequency',
             'section_id' => 'notifications',
             'setting_id' => 'notification_time'
         ));
+    }
+
+    public function save_settings($args){
+     
+        if(isset($args['frequency']) && is_array($args['frequency'])){
+
+            $value = $args['frequency'];
+            $default = get_option('notification_time');
+
+            if($value !== $default['frequency']){
+                
+                $this->unshedule_cron();
+                switch($value[0]){
+                    case 'hourly':
+                        $this->schedule_cron('hourly');
+                    break;
+                    case 'daily':
+                        $this->schedule_cron('daily');
+                    break;
+                    default:
+                    case 'weekly':
+                        $this->schedule_cron();
+                    break;
+                }
+                
+            }     
+        }
+        
+        return $args;
     }
 
     /**
@@ -351,7 +386,7 @@ class Md5_Hasher{
                     <select id="<?php echo $setting_id; ?>" name="<?php echo $setting_id; ?>[<?php echo $field_id; ?>][]" <?php if($multiple === true): ?>multiple<?php endif; ?>>
                     <?php
                     foreach($choices as $id => $name):?>
-                        <?php if(in_array($id,$options[$field_id])): ?>
+                        <?php if(is_array($options[$field_id]) && in_array($id,$options[$field_id])): ?>
                         <option value="<?php echo $id; ?>" selected="selected"><?php echo $name; ?></option>
                         <?php else: ?>
                         <option value="<?php echo $id; ?>"><?php echo $name; ?></option>
@@ -366,8 +401,3 @@ class Md5_Hasher{
 }
 
 $MD5_Hasher = new MD5_Hasher();
-
-if(isset($_GET['page']) && isset($_GET['check']) && $_GET['page'] == 'checksum-generator' && $_GET['check'] == 1){
-    echo 'checking';
-    $MD5_Hasher->hash_check();
-}
