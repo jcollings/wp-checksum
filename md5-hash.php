@@ -91,8 +91,10 @@ class Md5_Hasher{
             if( strcmp(str_replace("\\", "/", $dir_file),str_replace("\\", "/", MD5_HASHER_DIR.$this->file_check)) <> 0 
                 && strcmp(str_replace("\\", "/", $dir_file), str_replace("\\", "/", MD5_HASHER_DIR.$this->file_change)) <> 0){
 
+                $hash_key = @md5_file($dir_file);
+
                 $this->md5_gen_output[$dir_file] = array(
-                    'md5' => md5_file($dir_file),
+                    'md5' => $hash_key,
                     'filename' => $obj->getFilename(),
                     'real_path' => $dir_file
                 );
@@ -100,7 +102,7 @@ class Md5_Hasher{
                 if(!isset($this->md5_gen_old[$dir_file]->md5)){
                     // new file
                     $this->md5_changed_output[$dir_file] = array(
-                        'md5' => md5_file($dir_file),
+                        'md5' => $hash_key,
                         'filename' => $obj->getFilename(),
                         'real_path' => $dir_file,
                         'modified' => 'new'
@@ -108,7 +110,7 @@ class Md5_Hasher{
                 }else if($this->md5_gen_old[$dir_file]->md5 !== $this->md5_gen_output[$dir_file]['md5']){
                     // modified file
                     $this->md5_changed_output[$dir_file] = array(
-                        'md5' => md5_file($dir_file),
+                        'md5' => $hash_key,
                         'filename' => $obj->getFilename(),
                         'real_path' => $dir_file,
                         'modified' => 'edited'
@@ -127,7 +129,7 @@ class Md5_Hasher{
             $fh = fopen(MD5_HASHER_DIR.$this->file_change, 'a');
             fwrite($fh, date('d/m/Y H:i:s')." Changed Files(".count($this->md5_changed_output)."):\n\n");
             foreach($this->md5_changed_output as $k => $v){
-                fwrite($fh, $v['filename'].' => '.$v['modified']. "\n");
+                fwrite($fh, $v['real_path'].' => '.$v['modified']. "\n");
             }
             fwrite($fh, "\n");
         }else{
@@ -173,7 +175,7 @@ class Md5_Hasher{
 
         $message = 'File Changes:'."\n";
         foreach($this->md5_changed_output as $k => $v){
-            $message .=  $v['filename'].' => '.$v['modified']. "\n";
+            $message .=  $v['real_path'].' => '.$v['modified']. "\n";
         }
 
         wp_mail( $emails, 'Website Changes', $message);
