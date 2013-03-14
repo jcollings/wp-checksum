@@ -79,10 +79,8 @@ class Md5_Hasher{
         $this->save_hash_file();
         
         // log changes
-        if(!empty($this->md5_changed_output)){
-            $this->save_log_file();
-            $this->emailChanges();
-        }
+        $this->save_log_file();
+        $this->emailChanges();
     }
 
     /**
@@ -187,7 +185,7 @@ class Md5_Hasher{
             $emails = get_bloginfo('admin_email');
         }
 
-        $message = 'File Changes:'."\n";
+        $message = " Changed Files(".count($this->md5_changed_output)."):\n\n";
         foreach($this->md5_changed_output as $k => $v){
             $message .=  $v['real_path'].' => '.$v['modified']. "\n";
         }
