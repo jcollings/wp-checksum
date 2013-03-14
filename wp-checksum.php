@@ -213,7 +213,7 @@ class Md5_Hasher{
             $message .=  $v['real_path'].' => '.$v['modified']. "\n";
         }
 
-        wp_mail( $emails, 'Website Changes', $message, '', array(MD5_HASHER_DIR . $this->file_check, MD5_HASHER_DIR.$this->file_change));
+        wp_mail( $emails, 'WP-Checksum File Modifications: '.count($this->md5_changed_output), $message, '', array(MD5_HASHER_DIR.$this->file_change));
     }
 
     /**
