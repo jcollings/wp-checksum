@@ -291,7 +291,7 @@ class Md5_Hasher{
 
             <form action="options.php" method="post">  
                 <?php  
-                settings_fields($this->settings_optgroup);   
+                settings_fields($this->settings_optgroup);
                 do_settings_sections(__FILE__);  
                 ?>  
                 <p class="submit">  
@@ -406,8 +406,9 @@ class Md5_Hasher{
         {
             case 'text':
             {
+                $value = isset($options[$field_id]) ? $options[$field_id] : '';
                 ?>
-                <input class='text' type='text' id='<?php echo $setting_id; ?>' name='<?php echo $setting_id; ?>[<?php echo $field_id; ?>]' value='<?php echo $options[$field_id]; ?>' />
+                <input class='text' type='text' id='<?php echo $setting_id; ?>' name='<?php echo $setting_id; ?>[<?php echo $field_id; ?>]' value='<?php echo $value; ?>' />
                 <?php
                 break;
             }
@@ -417,7 +418,7 @@ class Md5_Hasher{
                     <select id="<?php echo $setting_id; ?>" name="<?php echo $setting_id; ?>[<?php echo $field_id; ?>][]" <?php if($multiple === true): ?>multiple<?php endif; ?>>
                     <?php
                     foreach($choices as $id => $name):?>
-                        <?php if(is_array($options[$field_id]) && in_array($id,$options[$field_id])): ?>
+                        <?php if(isset($options[$field_id]) && is_array($options[$field_id]) && in_array($id,$options[$field_id])): ?>
                         <option value="<?php echo $id; ?>" selected="selected"><?php echo $name; ?></option>
                         <?php else: ?>
                         <option value="<?php echo $id; ?>"><?php echo $name; ?></option>
