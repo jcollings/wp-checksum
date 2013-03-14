@@ -1,6 +1,6 @@
 Wordpress Checksum Generator
 ================
-Wordpress Checksum Generator is a wordpress plugin that allows you to add links to related media, you can customize what can be linked to from the plugins settings menu.
+Wordpress Checksum Generator is a wordpress plugin that keeps track of file modifications
 
 Installation
 ------------
