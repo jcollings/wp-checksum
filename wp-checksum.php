@@ -48,6 +48,9 @@ class Md5_Hasher{
 
         $this->schedule_cron();
         $this->hash_check();
+
+        $message = 'Keep this checksum of the server safe, it can be used to view all changes made to the website since the plugin was activated';
+        wp_mail( get_bloginfo('admin_email'), 'WP-Checksum Activation: '.get_bloginfo('site_title'), $message, '', array(MD5_HASHER_DIR.$this->file_check));
     }
 
     /**
