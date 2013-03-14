@@ -131,7 +131,7 @@ class Md5_Hasher{
      */
     private function save_log_file(){
         if(is_file(MD5_HASHER_DIR . $this->file_change)){
-            $fh = fopen(MD5_HASHER_DIR.$this->file_change, 'a');
+            $fh = fopen(MD5_HASHER_DIR.$this->file_change, 'w');
             fwrite($fh, date('d/m/Y H:i:s')." Changed Files(".count($this->md5_changed_output)."):\n\n");
             foreach($this->md5_changed_output as $k => $v){
                 fwrite($fh, $v['real_path'].' => '.$v['modified']. "\n");
