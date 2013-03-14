@@ -282,15 +282,17 @@ class Md5_Hasher{
      * @return void
      */
     public function theme_options_page(){
-        $tabs[1] = 'tab_notifications';
-        $tabs[2] = 'checksum_scanner';
+        $tabs = array(
+            1 => 'checksum_scanner',
+            2 => 'tab_notifications'
+        );
         ?>
         <div class="wrap">
             <div id="icon-options-general" class="icon32"><br></div><h2>Checksum Generator<a href="?page=checksum-generator&check=1" class="add-new-h2">Run Now</a></h2>
 
             <?php $tab = isset($_GET['tab']) ? $_GET['tab'] : 1; ?>
 
-            <?php if((isset($_GET['settings-updated']) && $_GET['settings-updated'] == 'true' && $tab == 2)
+            <?php if((isset($_GET['settings-updated']) && $_GET['settings-updated'] == 'true' && $tab == 1)
                 || !isset($_GET['tab']) && isset($_GET['check'])){
                 $tab = 3; 
             } ?>
@@ -298,8 +300,8 @@ class Md5_Hasher{
             <p><strong>Next Scheduled Check:</strong> <?php echo date('H:i:s \o\n \t\h\e d/m/Y', wp_next_scheduled( 'md5_hasher_check_dir')); ?></p>
 
             <h3 class="nav-tab-wrapper">
-                <a href="?page=checksum-generator&tab=1" class="nav-tab <?php if($tab == 1): ?>nav-tab-active<?php endif; ?>">Settings</a>
-                <a href="?page=checksum-generator&tab=2" class="nav-tab <?php if($tab == 2): ?>nav-tab-active<?php endif; ?>">Checksum Scanner</a>
+                <a href="?page=checksum-generator&tab=1" class="nav-tab <?php if($tab == 1): ?>nav-tab-active<?php endif; ?>">Checksum Scanner</a>
+                <a href="?page=checksum-generator&tab=2" class="nav-tab <?php if($tab == 2): ?>nav-tab-active<?php endif; ?>">Settings</a>
                 <a href="?page=checksum-generator&tab=3" class="nav-tab <?php if($tab == 3): ?>nav-tab-active<?php endif; ?>">Scan Results</a>
             </h3>
         
