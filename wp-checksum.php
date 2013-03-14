@@ -282,22 +282,47 @@ class Md5_Hasher{
      * @return void
      */
     public function theme_options_page(){
+        $tabs[1] = 'tab_notifications';
+        $tabs[2] = 'checksum_scanner';
         ?>
         <div class="wrap">
             <div id="icon-options-general" class="icon32"><br></div><h2>Checksum Generator<a href="?page=checksum-generator&check=1" class="add-new-h2">Run Now</a></h2>
-            <p>Keep track file changes, so you know when something is going wrong.</p>
+
+            <?php $tab = isset($_GET['tab']) ? $_GET['tab'] : 1; ?>
+
+            <?php if((isset($_GET['settings-updated']) && $_GET['settings-updated'] == 'true' && $tab == 2)
+                || !isset($_GET['tab']) && isset($_GET['check'])){
+                $tab = 3; 
+            } ?>
 
             <p><strong>Next Scheduled Check:</strong> <?php echo date('H:i:s \o\n \t\h\e d/m/Y', wp_next_scheduled( 'md5_hasher_check_dir')); ?></p>
 
-            <form action="options.php" method="post">  
+            <h3 class="nav-tab-wrapper">
+                <a href="?page=checksum-generator&tab=1" class="nav-tab <?php if($tab == 1): ?>nav-tab-active<?php endif; ?>">Settings</a>
+                <a href="?page=checksum-generator&tab=2" class="nav-tab <?php if($tab == 2): ?>nav-tab-active<?php endif; ?>">Checksum Scanner</a>
+                <a href="?page=checksum-generator&tab=3" class="nav-tab <?php if($tab == 3): ?>nav-tab-active<?php endif; ?>">Scan Results</a>
+            </h3>
+        
+            <?php if($tab == 1 || $tab == 2): ?>
+            <form action="options.php" method="post" enctype="multipart/form-data">  
                 <?php  
                 settings_fields($this->settings_optgroup);
-                do_settings_sections(__FILE__);  
+                // do_settings_sections(__FILE__);  
+                do_settings_sections($tabs[$tab])
                 ?>  
                 <p class="submit">  
                     <input name="Submit" type="submit" class="button-primary" value="<?php esc_attr_e('Save Changes'); ?>" />  
                 </p>  
             </form> 
+            <?php endif; ?>
+
+            <?php
+            if($tab == 3){
+                echo '<pre>';
+                echo file_get_contents(MD5_HASHER_DIR . $this->file_change);
+                echo '</pre>';
+            }
+            ?>
 
         </div>
         <?php
@@ -312,13 +337,16 @@ class Md5_Hasher{
         // register_setting($option_group, $option_name, $sanitize_callback = '')
         register_setting($this->settings_optgroup, 'notification_email');
         register_setting($this->settings_optgroup, 'notification_users');
+        register_setting($this->settings_optgroup, 'checksum_file', array($this, 'save_settings'));
         register_setting($this->settings_optgroup, 'notification_time', array($this, 'save_settings'));
 
         // add_settings_section($id, $title, $callback, $page)
-        add_settings_section('notifications', 'Notification Settings', array($this, 'section_notification'), __FILE__);
-        
+        add_settings_section('notifications', 'Notification Settings', array($this, 'section_notification'), 'tab_notifications');
+        add_settings_section('scanner', 'Scanner', array($this, 'section_scanner'), 'checksum_scanner');
+
+
         // add_settings_field($id, $title, $callback, $page, $section = 'default', $args = array)
-        add_settings_field('email_add', 'Email Address', array($this, 'field_callback'), __FILE__, 'notifications', array(
+        add_settings_field('email_add', 'Email Address', array($this, 'field_callback'), 'tab_notifications', 'notifications', array(
             'type' => 'text',
             'field_id' => 'email_add',
             'section_id' => 'notifications',
@@ -334,7 +362,7 @@ class Md5_Hasher{
             }
         }
 
-        add_settings_field('email_users', 'Admin Accounts', array($this, 'field_callback'), __FILE__, 'notifications', array(
+        add_settings_field('email_users', 'Admin Accounts', array($this, 'field_callback'), 'tab_notifications', 'notifications', array(
             'type' => 'select',
             'choices' => $users,
             'multiple' => true,
@@ -342,13 +370,19 @@ class Md5_Hasher{
             'section_id' => 'notifications',
             'setting_id' => 'notification_users'
         ));
-        add_settings_field('frequency', 'Schedule Frequency', array($this, 'field_callback'), __FILE__, 'notifications', array(
+        add_settings_field('frequency', 'Schedule Frequency', array($this, 'field_callback'), 'tab_notifications', 'notifications', array(
             'type' => 'select',
             'choices' => array('hourly' => 'Hourly','daily' => 'Daily','weekly' => 'Weekly'),
             'default' => 'weekly',
             'field_id' => 'frequency',
             'section_id' => 'notifications',
             'setting_id' => 'notification_time'
+        ));
+        add_settings_field('file_upload', 'Checksum File', array($this, 'field_callback'), 'checksum_scanner', 'scanner', array(
+            'type' => 'upload',
+            'field_id' => 'file_upload',
+            'section_id' => 'scanner',
+            'setting_id' => 'checksum_file'
         ));
     }
 
@@ -376,19 +410,42 @@ class Md5_Hasher{
                 }
                 
             }     
+        }elseif(isset($_FILES['checksum_file'])){
+
+            // load uploaded files
+            $file = file_get_contents($_FILES['checksum_file']['tmp_name']['file_upload']);
+            
+            // load compare file
+            $this->md5_gen_old = (Array)json_decode($file);
+
+            // read directory
+            $this->read_directory();
+
+            $this->save_log_file();
         }
         
         return $args;
     }
 
     /**
-     * settings notification section callback
+     * notification section description
      * @return void
      */
     public function section_notification()
     {
         ?>
         <p>Set the emails you wish to recieve notifications</p>
+        <?php
+    }
+
+    /**
+     * scanner section description
+     * @return void
+     */
+    public function section_scanner()
+    {
+        ?>
+        <p>Upload a previously generated checksum file, to compare against the websites files.</p>
         <?php
     }
 
@@ -426,6 +483,13 @@ class Md5_Hasher{
                     <?php endforeach; ?>
                     </select>
                     <?php
+                break;
+            }
+            case 'upload':
+            {
+                ?>
+                <input class='file' type='file' id='<?php echo $setting_id; ?>' name='<?php echo $setting_id; ?>[<?php echo $field_id; ?>]'  />
+                <?php
                 break;
             }
         }
