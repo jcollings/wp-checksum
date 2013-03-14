@@ -18,6 +18,7 @@ class Md5_Hasher{
     private $md5_gen_output = array();
     private $md5_changed_output = array();
     private $settings_optgroup = 'wp-checksum-generator';
+    private $email = true;
     
     /**
      * Setup hooks and load settings
@@ -25,13 +26,13 @@ class Md5_Hasher{
      */
     public function __construct(){
         add_action('md5_hasher_check_dir', array($this, 'run_hash_check'));
+        add_action( 'admin_menu', array($this, 'settings_menu' ));
+
         add_filter( 'cron_schedules', array($this, 'cron_add_schedules'));
+        add_filter('plugin_action_links_'.plugin_basename(__FILE__), array($this, 'settings_link'));
 
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'unshedule_cron'));
-
-        // admin hooks
-        add_action( 'admin_menu', array($this, 'settings_menu' ));
 
         if(isset($_GET['page']) && isset($_GET['check']) && $_GET['page'] == 'checksum-generator' && $_GET['check'] == 1){
             $this->run_hash_check();
@@ -39,6 +40,8 @@ class Md5_Hasher{
     }
 
     public function activate(){
+        $this->email = false;
+
         $this->schedule_cron();
         $this->hash_check();
     }
@@ -80,7 +83,10 @@ class Md5_Hasher{
         
         // log changes
         $this->save_log_file();
-        $this->emailChanges();
+
+        // email results
+        if($this->email)
+            $this->emailChanges();
     }
 
     /**
@@ -96,30 +102,31 @@ class Md5_Hasher{
             if( strcmp(str_replace("\\", "/", $dir_file),str_replace("\\", "/", MD5_HASHER_DIR.$this->file_check)) <> 0 
                 && strcmp(str_replace("\\", "/", $dir_file), str_replace("\\", "/", MD5_HASHER_DIR.$this->file_change)) <> 0){
 
-                $hash_key = @md5_file($dir_file);
-
-                $this->md5_gen_output[$dir_file] = array(
-                    'md5' => $hash_key,
-                    'filename' => $obj->getFilename(),
-                    'real_path' => $dir_file
-                );
-
-                if(!isset($this->md5_gen_old[$dir_file]->md5)){
-                    // new file
-                    $this->md5_changed_output[$dir_file] = array(
+                if(is_readable($dir_file)){
+                    $hash_key = @md5_file($dir_file);
+                    $this->md5_gen_output[$dir_file] = array(
                         'md5' => $hash_key,
                         'filename' => $obj->getFilename(),
-                        'real_path' => $dir_file,
-                        'modified' => 'new'
+                        'real_path' => $dir_file
                     );
-                }else if($this->md5_gen_old[$dir_file]->md5 !== $this->md5_gen_output[$dir_file]['md5']){
-                    // modified file
-                    $this->md5_changed_output[$dir_file] = array(
-                        'md5' => $hash_key,
-                        'filename' => $obj->getFilename(),
-                        'real_path' => $dir_file,
-                        'modified' => 'edited'
-                    ); 
+
+                    if(!isset($this->md5_gen_old[$dir_file]->md5)){
+                        // new file
+                        $this->md5_changed_output[$dir_file] = array(
+                            'md5' => $hash_key,
+                            'filename' => $obj->getFilename(),
+                            'real_path' => $dir_file,
+                            'modified' => 'new'
+                        );
+                    }else if($this->md5_gen_old[$dir_file]->md5 !== $this->md5_gen_output[$dir_file]['md5']){
+                        // modified file
+                        $this->md5_changed_output[$dir_file] = array(
+                            'md5' => $hash_key,
+                            'filename' => $obj->getFilename(),
+                            'real_path' => $dir_file,
+                            'modified' => 'edited'
+                        ); 
+                    }
                 }
             }
         }
@@ -127,30 +134,41 @@ class Md5_Hasher{
     
     /**
      * Save Changes to file
-     * @return void
+     * @return Boolean
      */
     private function save_log_file(){
-        if(is_file(MD5_HASHER_DIR . $this->file_change)){
-            $fh = fopen(MD5_HASHER_DIR.$this->file_change, 'w');
+
+        $file = MD5_HASHER_DIR . $this->file_change;
+        if(is_file($file) && is_writable($file)){
+            $fh = fopen($file, 'w');
             fwrite($fh, date('d/m/Y H:i:s')." Changed Files(".count($this->md5_changed_output)."):\n\n");
-            foreach($this->md5_changed_output as $k => $v){
+
+            foreach($this->md5_changed_output as $k => $v)
                 fwrite($fh, $v['real_path'].' => '.$v['modified']. "\n");
-            }
+
             fwrite($fh, "\n");
-        }else{
-            $fh = fopen(MD5_HASHER_DIR.$this->file_change, 'x');
+            fclose($fh);
+            return true;
         }
-        fclose($fh); 
+
+        return false;
     }
 
     /**
      * Save new hashes to file
-     * @return void
+     * @return Boolean
      */
     private function save_hash_file(){
-        $fh = fopen(MD5_HASHER_DIR.$this->file_check, 'w');
-        fwrite($fh, json_encode($this->md5_gen_output));
-        fclose($fh);
+
+        $file = MD5_HASHER_DIR.$this->file_check;
+        if(is_file($file) && is_writable($file)){
+            $fh = fopen($file, 'w');
+            fwrite($fh, json_encode($this->md5_gen_output));
+            fclose($fh);
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -158,16 +176,17 @@ class Md5_Hasher{
      * @return void
      */
     private function read_hash_file(){
-        if(!is_file(MD5_HASHER_DIR . $this->file_check)){
-            // create empty file if none exits
-            $fh = fopen(MD5_HASHER_DIR . $this->file_check, 'x');
-        }else{
+
+        $file = MD5_HASHER_DIR . $this->file_check;
+
+        if(is_file($file) && is_readable($file)){
             $fh = fopen(MD5_HASHER_DIR . $this->file_check, 'r');
 
             if(filesize(MD5_HASHER_DIR.$this->file_check) > 0)
                 $this->md5_gen_old = (Array)json_decode(fread($fh, filesize(MD5_HASHER_DIR.$this->file_check)));
+
+            fclose($fh);
         }
-        fclose($fh);
     }
 
     /**
@@ -202,6 +221,9 @@ class Md5_Hasher{
         $emails = array();
         $args = array('role' => 'Administrator');
 
+        if(is_null($ids) || empty($ids))
+            return false;
+
         if(is_array($ids) && !empty($ids)){
             $args['include'] = $ids;
         }
@@ -231,6 +253,16 @@ class Md5_Hasher{
             'display' => __( 'Once Weekly' )
         );
         return $schedules;
+    }
+
+    /**
+     * Add settings link to plugins table
+     * @param  array $args links 
+     * @return arrary
+     */
+    function settings_link($args){
+        array_unshift($args, '<a href="tools.php?page=checksum-generator">Settings</a>');
+        return $args;
     }
 
     /**
@@ -313,6 +345,7 @@ class Md5_Hasher{
         add_settings_field('frequency', 'Schedule Frequency', array($this, 'field_callback'), __FILE__, 'notifications', array(
             'type' => 'select',
             'choices' => array('hourly' => 'Hourly','daily' => 'Daily','weekly' => 'Weekly'),
+            'default' => 'weekly',
             'field_id' => 'frequency',
             'section_id' => 'notifications',
             'setting_id' => 'notification_time'
@@ -336,8 +369,8 @@ class Md5_Hasher{
                     case 'daily':
                         $this->schedule_cron('daily');
                     break;
-                    default:
                     case 'weekly':
+                    default:
                         $this->schedule_cron();
                     break;
                 }
