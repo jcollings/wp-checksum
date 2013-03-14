@@ -39,6 +39,10 @@ class Md5_Hasher{
         }
     }
 
+    /**
+     * Plugin Activation
+     * @return void
+     */
     public function activate(){
         $this->email = false;
 
@@ -388,6 +392,11 @@ class Md5_Hasher{
         ));
     }
 
+    /**
+     * Validate Save Settings
+     * @param  array
+     * @return array
+     */
     public function save_settings($args){
      
         if(isset($args['frequency']) && is_array($args['frequency'])){
