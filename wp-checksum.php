@@ -25,7 +25,7 @@ class Md5_Hasher{
      * @return void
      */
     public function __construct(){
-        add_action('md5_hasher_check_dir', array($this, 'run_hash_check'));
+        add_action('md5_hasher_check_dir', array($this, 'hash_check'));
         add_action( 'admin_menu', array($this, 'settings_menu' ));
 
         add_filter( 'cron_schedules', array($this, 'cron_add_schedules'));
