@@ -117,10 +117,13 @@ class Md5_Hasher{
                         'real_path' => $dir_file
                     );
 
+                    $file_ext = substr(strrchr($obj->getFilename(),'.'),1);
+
                     if(!isset($this->md5_gen_old[$dir_file]->md5)){
                         // new file
                         $this->md5_changed_output[$dir_file] = array(
                             'md5' => $hash_key,
+                            'ext' => $file_ext,
                             'filename' => $obj->getFilename(),
                             'real_path' => $dir_file,
                             'modified' => 'new'
@@ -129,6 +132,7 @@ class Md5_Hasher{
                         // modified file
                         $this->md5_changed_output[$dir_file] = array(
                             'md5' => $hash_key,
+                            'ext' => $file_ext,
                             'filename' => $obj->getFilename(),
                             'real_path' => $dir_file,
                             'modified' => 'edited'
@@ -137,6 +141,17 @@ class Md5_Hasher{
                 }
             }
         }
+    }
+
+    private function order_changed_log(){
+        $unsorted = $this->md5_changed_output;
+        $sorted = array();
+
+        foreach($unsorted as $log){
+            $sorted[$log['ext']][] = $log;
+        }
+        
+        return $sorted;
     }
     
     /**
@@ -148,10 +163,15 @@ class Md5_Hasher{
         $file = MD5_HASHER_DIR . $this->file_change;
         if(is_file($file) && is_writable($file)){
             $fh = fopen($file, 'w');
-            fwrite($fh, date('d/m/Y H:i:s')." Changed Files(".count($this->md5_changed_output)."):\n\n");
+            fwrite($fh, date('d/m/Y H:i:s')." Changed Files(".count($this->md5_changed_output)."):\n");
 
-            foreach($this->md5_changed_output as $k => $v)
-                fwrite($fh, $v['real_path'].' => '.$v['modified']. "\n");
+            $changes = $this->order_changed_log();
+            foreach($changes as $ext => $log_type){
+                fwrite($fh, "\nFile Type (".$ext."): \n");
+                foreach($log_type as $k => $v){
+                    fwrite($fh, $v['real_path'].' => '.$v['modified']. "\n");
+                }
+            }
 
             fwrite($fh, "\n");
             fclose($fh);
@@ -211,12 +231,18 @@ class Md5_Hasher{
             $emails = get_bloginfo('admin_email');
         }
 
-        $message = " Changed Files(".count($this->md5_changed_output)."):\n\n";
-        foreach($this->md5_changed_output as $k => $v){
-            $message .=  $v['real_path'].' => '.$v['modified']. "\n";
+        $message = " Changed Files(".count($this->md5_changed_output)."):\n";
+        $changes = $this->order_changed_log();
+        $files = 0;
+        foreach($changes as $ext => $log_type){
+            $message .=  "\nFile Type (".$ext."): \n";
+            foreach($log_type as $k => $v){
+                $files++;
+                $message .=  $v['real_path'].' => '.$v['modified']. "\n";
+            }
         }
 
-        wp_mail( $emails, 'WP-Checksum File Modifications: '.count($this->md5_changed_output), $message, '', array(MD5_HASHER_DIR.$this->file_change));
+        wp_mail( $emails, 'WP-Checksum File Modifications: '.$files, $message, '', array(MD5_HASHER_DIR.$this->file_change));
     }
 
     /**
