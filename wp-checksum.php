@@ -89,11 +89,13 @@ class Md5_Hasher{
         $this->save_hash_file();
         
         // log changes
-        $this->save_log_file();
+        if(!empty($this->md5_gen_old)){
+            $this->save_log_file();
 
-        // email results
-        if($this->email)
-            $this->emailChanges();
+            // email changes
+            if($this->email)
+                $this->emailChanges();    
+        }
     }
 
     /**
