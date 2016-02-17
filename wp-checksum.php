@@ -8,6 +8,10 @@ Version: 0.0.1
 Author URI: http://www.jclabs.co.uk
 */
 
+use Symfony\Component\Finder\Finder;
+
+require 'vendor/autoload.php';
+
 define('MD5_HASHER_DIR', plugin_dir_path( __FILE__ ));
 
 class Md5_Hasher{
@@ -19,6 +23,9 @@ class Md5_Hasher{
     private $md5_changed_output = array();
     private $settings_optgroup = 'wp-checksum-generator';
     private $email = true;
+    private $email_enabled = true;
+    private $email_empty_changes = false;
+    private $ignore_list = array();
     
     /**
      * Setup hooks and load settings
@@ -45,12 +52,7 @@ class Md5_Hasher{
      */
     public function activate(){
         $this->email = false;
-
         $this->schedule_cron();
-        $this->hash_check();
-
-        $message = 'Keep this checksum of the server safe, it can be used to view all changes made to the website since the plugin was activated';
-        wp_mail( get_bloginfo('admin_email'), 'WP-Checksum Activation: '.get_bloginfo('site_title'), $message, '', array(MD5_HASHER_DIR.$this->file_check));
     }
 
     /**
@@ -92,6 +94,9 @@ class Md5_Hasher{
         if(!empty($this->md5_gen_old)){
             $this->save_log_file();
 
+            // hook to allow notices
+            do_action('jc_checksum_complete', $this);
+
             // email changes
             if($this->email)
                 $this->emailChanges();    
@@ -103,9 +108,20 @@ class Md5_Hasher{
      * @return void
      */
     private function read_directory(){
-        $rdi = new RecursiveDirectoryIterator(ABSPATH);
-        $rii = new RecursiveIteratorIterator($rdi);
-        foreach($rii as $name => $obj){
+
+        $ignore_list = array('node_modules');
+        if(!empty($this->ignore_list)){
+            $ignore_list = array_merge($ignore_list, $this->ignore_list);
+        }
+
+        $finder = new Finder();
+        $dirs = $finder->files()
+            ->in(ABSPATH)
+            ->ignoreDotFiles(true)
+            ->ignoreVCS(true)
+            ->exclude($ignore_list);
+
+        foreach($dirs as $name => $obj){
             $dir_file = $obj->getRealPath(); 
 
             if( strcmp(str_replace("\\", "/", $dir_file),str_replace("\\", "/", MD5_HASHER_DIR.$this->file_check)) <> 0 
@@ -145,7 +161,7 @@ class Md5_Hasher{
         }
     }
 
-    private function order_changed_log(){
+    public function order_changed_log(){
         $unsorted = $this->md5_changed_output;
         $sorted = array();
 
@@ -223,6 +239,11 @@ class Md5_Hasher{
      * @return void
      */
     private function emailChanges(){
+
+        if(!$this->email_enabled){
+            return;
+        }
+
         $emails = $this->getAdminEmails(get_option('notification_users'));
         $custom_email = get_option('notification_email');
 
@@ -242,6 +263,10 @@ class Md5_Hasher{
                 $files++;
                 $message .=  $v['real_path'].' => '.$v['modified']. "\n";
             }
+        }
+
+        if($files == 0 && !$this->email_empty_changes){
+            return;
         }
 
         wp_mail( $emails, 'WP-Checksum File Modifications: '.$files, $message, '', array(MD5_HASHER_DIR.$this->file_change));
@@ -508,6 +533,14 @@ class Md5_Hasher{
                 $value = isset($options[$field_id]) ? $options[$field_id] : '';
                 ?>
                 <input class='text' type='text' id='<?php echo $setting_id; ?>' name='<?php echo $setting_id; ?>[<?php echo $field_id; ?>]' value='<?php echo $value; ?>' />
+                <?php
+                break;
+            }
+            case 'textarea':
+            {
+                $value = isset($options[$field_id]) ? $options[$field_id] : '';
+                ?>
+                <textarea name="<?php echo $setting_id; ?>[<?php echo $field_id; ?>]" id="<?php echo $setting_id; ?>" cols="30" rows="10"><?php echo $value; ?></textarea>
                 <?php
                 break;
             }
